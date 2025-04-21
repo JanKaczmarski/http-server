@@ -114,8 +114,10 @@ func AssertResponseBody(t testing.TB, got, want string) {
 	}
 }
 
-func AssertStatus(t testing.TB, got, want int) {
+func AssertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
 	t.Helper()
+	got := response.Code
+
 	if got != want {
 		t.Errorf("did not get correct status, got %d want %d", got, want)
 	}
@@ -132,4 +134,24 @@ func AssertPlayerWin(t testing.TB, store *StubPlayerStore, winner string) {
 		t.Errorf("did not store correct winner got %q want %q", store.winCalls[0], winner)
 	}
 
+}
+
+func CheckSchedulingCases(cases []ScheduleAlert, t testing.TB, blindAlerter *SpyBlindAlerter) {
+	t.Helper()
+	for i, want := range cases {
+		if len(blindAlerter.Alerts) <= i {
+			t.Fatalf("alert %d was not scheduled %v", i, blindAlerter.Alerts)
+		}
+
+		got := blindAlerter.Alerts[i]
+		AssertScheduleAlert(t, got, want)
+	}
+}
+
+func AssertScheduleAlert(t testing.TB, got, want ScheduleAlert) {
+	t.Helper()
+
+	if got != want {
+		t.Errorf("got schedule alert of %v, want %v", got, want)
+	}
 }

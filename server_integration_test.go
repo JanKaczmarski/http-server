@@ -13,8 +13,12 @@ func TestRecordingWinsAndRetrievingThem(t *testing.T) {
 	store, err := NewFileSystemPlayerStore(database)
 	AssertNoError(t, err)
 
-	server := NewPlayerServer(store)
 	player := "Pepper"
+	server := mustMakePlayerServer(t, store, dummyGame)
+
+	if err != nil {
+		t.Fatalf("Error creating new player server %v", err)
+	}
 
 	server.ServeHTTP(httptest.NewRecorder(), NewPostWinRequest(player))
 	server.ServeHTTP(httptest.NewRecorder(), NewPostWinRequest(player))
@@ -23,7 +27,7 @@ func TestRecordingWinsAndRetrievingThem(t *testing.T) {
 	t.Run("get score", func(t *testing.T) {
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, NewGetScoreRequest(player))
-		AssertStatus(t, response.Code, http.StatusOK)
+		AssertStatus(t, response, http.StatusOK)
 
 		AssertResponseBody(t, response.Body.String(), "3")
 	})
@@ -31,7 +35,7 @@ func TestRecordingWinsAndRetrievingThem(t *testing.T) {
 	t.Run("get league", func(t *testing.T) {
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, NewLeagueRequest())
-		AssertStatus(t, response.Code, http.StatusOK)
+		AssertStatus(t, response, http.StatusOK)
 
 		got := GetLeagueRequest(t, response.Body)
 		want := []Player{
