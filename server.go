@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -33,6 +33,10 @@ type PlayerServer struct {
 	http.Handler
 	template *template.Template
 	game     Game
+}
+
+type playerServerWS struct {
+	*websocket.Conn
 }
 
 func NewPlayerServer(store PlayerStore, game Game) (*PlayerServer, error) {
@@ -91,16 +95,14 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 func (p *PlayerServer) webSocket(w http.ResponseWriter, r *http.Request) {
-	conn, _ := wsUpgrader.Upgrade(w, r, nil)
+	ws := newPlayerServerWS(w, r)
 
-	_, numberOfPlayersMsg, _ := conn.ReadMessage()
-	numberOfPlayers, _ := strconv.Atoi(string(numberOfPlayersMsg))
+	numberOfPlayersMsg := ws.WaitForMsg()
+	numberOfPlayers, _ := strconv.Atoi(numberOfPlayersMsg)
+	p.game.Start(numberOfPlayers, ws)
 
-	p.game.Start(numberOfPlayers, io.Discard)
-
-	_, winner, _ := conn.ReadMessage()
-
-	p.game.Finish(string(winner))
+	winner := ws.WaitForMsg()
+	p.game.Finish(winner)
 }
 
 func (p *PlayerServer) processWin(w http.ResponseWriter, player string) {
@@ -111,4 +113,31 @@ func (p *PlayerServer) processWin(w http.ResponseWriter, player string) {
 func (p *PlayerServer) leagueHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	json.NewEncoder(w).Encode(p.store.GetLeague())
+}
+
+func newPlayerServerWS(w http.ResponseWriter, r *http.Request) *playerServerWS {
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("problem upgrading connection to WebSockets %v\n", err)
+	}
+
+	return &playerServerWS{conn}
+}
+
+func (w *playerServerWS) WaitForMsg() string {
+	_, msg, err := w.ReadMessage()
+	if err != nil {
+		log.Printf("error reading from websocket %v\n", err)
+	}
+	return string(msg)
+}
+
+func (w *playerServerWS) Write(p []byte) (n int, err error) {
+	err = w.WriteMessage(websocket.TextMessage, p)
+
+	if err != nil {
+		return 0, nil
+	}
+
+	return len(p), nil
 }
